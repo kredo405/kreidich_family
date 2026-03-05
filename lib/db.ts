@@ -1,6 +1,12 @@
 import { supabaseServer } from './supabaseServer';
 import type { SupabaseClient } from '@supabase/supabase-js';
 
+type KinshipEntry = {
+  id: string;
+  title?: string;
+  titul?: string; // поддержка возможного старого ключа из JSON
+};
+
 type NodeData = {
   id: string;
   name?: string;
@@ -9,6 +15,7 @@ type NodeData = {
   death?: string;
   photoUrl?: string;
   position?: { x: number; y: number };
+  kinships?: KinshipEntry[] | null;
   data?: any;
 };
 
@@ -34,6 +41,8 @@ export async function upsertPeople(nodes: NodeData[], client?: SupabaseClient) {
     information: (n as any).information ?? (n.data?.information ?? null),
     // prefer explicit data, otherwise include information if present
     data: n.data ?? ((n as any).information ? { information: (n as any).information } : null),
+    // JSONB-поле с родством относительно этого человека
+    kinships: n.kinships ?? n.data?.kinships ?? null,
   }));
 
   const { data, error } = await sb.from('people').upsert(rows, { onConflict: 'id' });
@@ -52,6 +61,7 @@ export async function createPerson(data: Partial<NodeData>, client?: SupabaseCli
     position: data.position ? JSON.stringify(data.position) : null,
     information: (data as any).information ?? (data.data?.information ?? null),
     data: data.data ?? ((data as any).information ? { information: (data as any).information } : null),
+    kinships: data.kinships ?? data.data?.kinships ?? null,
   };
   const { data: res, error } = await sb.from('people').insert(row).select().single();
   return { data: res, error };
@@ -67,6 +77,7 @@ export async function updatePerson(id: string, updates: Partial<NodeData>, clien
   if (updates.death !== undefined) payload.death = updates.death;
   if (updates.photoUrl !== undefined) payload.photo_url = updates.photoUrl;
   if (updates.position !== undefined) payload.position = JSON.stringify(updates.position);
+  if ((updates as any).kinships !== undefined) payload.kinships = (updates as any).kinships;
   // if updates include `information`, set explicit column and merge into existing `data` JSONB
   if ((updates as any).information !== undefined) {
     payload.information = (updates as any).information;
@@ -106,6 +117,12 @@ export async function upsertRelations(edges: EdgeData[], client?: SupabaseClient
   }));
 
   const { data, error } = await sb.from('relations').upsert(rows, { onConflict: 'id' });
+  return { data, error };
+}
+
+export async function deleteRelation(id: string, client?: SupabaseClient) {
+  const sb = client ?? supabaseServer;
+  const { data, error } = await sb.from('relations').delete().eq('id', id).select().maybeSingle();
   return { data, error };
 }
 

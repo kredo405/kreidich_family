@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import ReactFlow, {
   addEdge,
   applyEdgeChanges,
@@ -54,6 +54,8 @@ export default function FlowCanvas() {
   const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [showSelector, setShowSelector] = useState(false);
+  const [isInitialized, setIsInitialized] = useState(false);
+  const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // load nodes/edges from server on mount
   useEffect(() => {
@@ -69,25 +71,39 @@ export default function FlowCanvas() {
             id: p.id,
             type: 'person',
             position: p.position ? JSON.parse(p.position) : { x: 200 + Math.random() * 200, y: 100 + Math.random() * 200 },
-              data: {
-                name: p.name ?? '',
-                birth: p.birth ?? '',
-                title: p.title ?? '',
-                photoUrl: p.photo_url ?? null,
-                information: p.data?.information ?? null,
-                isCurrentUser: p.id === currentUserId,
-              },
+            data: {
+              name: p.name ?? '',
+              birth: p.birth ?? '',
+              // базовый титул (профессия/роль) человека, не зависящий от выбранного пользователя
+              originalTitle: p.title ?? '',
+              // отображаемый титул по умолчанию совпадает с базовым
+              title: p.title ?? '',
+              photoUrl: p.photo_url ?? null,
+              information: p.data?.information ?? null,
+              // JSONB-родство из БД: [{ id: '...', title: 'отец' }, ...]
+              kinships: p.kinships ?? null,
+              isCurrentUser: false,
+            },
           }));
           setNodes(loadedNodes);
         }
         if (res.edges) {
-          const loadedEdges = res.edges.map((e: any) => ({ id: e.id, source: e.source, target: e.target, label: e.label ?? '' }));
+          const loadedEdges = res.edges.map((e: any) => ({
+            id: e.id,
+            source: e.source,
+            target: e.target,
+            label: e.label ?? '',
+            sourceHandle: e.data?.sourceHandle ?? undefined,
+            targetHandle: e.data?.targetHandle ?? undefined,
+          }));
           setEdges(loadedEdges);
         }
       } catch (err) {
         // ignore - keep initial demo nodes
         // console.error('loadFlowFromServer', err);
       }
+      // после первой попытки загрузки разрешаем автосохранение
+      setIsInitialized(true);
     })();
     return () => {
       mounted = false;
@@ -102,16 +118,106 @@ export default function FlowCanvas() {
     setShowSelector(true);
   }, []);
 
-  // when current user changes, mark nodes accordingly
+  // when current user or nodes set changes, mark nodes and вычислить титулы относительно выбранного пользователя
   useEffect(() => {
-    setNodes((nds) => nds.map((n) => ({ ...n, data: { ...n.data, isCurrentUser: n.id === currentUserId } })));
-  }, [currentUserId, setNodes]);
+    setNodes((nds) => {
+      // находим выбранного пользователя и его JSON-родство
+      const current = currentUserId ? nds.find((n) => n.id === currentUserId) : null;
+      const kinships = (current?.data as any)?.kinships ?? [];
 
-  const onConnect = useCallback((connection: Connection) => {
-    const id = `e${connection.source}-${connection.target}-${Date.now()}`;
-    const newEdge: Edge = { id, source: connection.source!, target: connection.target!, animated: false, label: '' };
-    setEdges((eds) => eds.concat(newEdge));
-  }, [setEdges]);
+      return nds.map((n) => {
+        const d: any = n.data ?? {};
+        const originalTitle = d.originalTitle ?? d.title ?? '';
+
+        let titleForDisplay = originalTitle;
+        if (current && n.id !== currentUserId && Array.isArray(kinships)) {
+          const rel = kinships.find((k: any) => String(k.id) === String(n.id));
+          if (rel?.title || rel?.titul) {
+            titleForDisplay = rel.title ?? rel.titul;
+          }
+        }
+
+        return {
+          ...n,
+          data: {
+            ...d,
+            originalTitle,
+            title: titleForDisplay,
+            isCurrentUser: n.id === currentUserId,
+          },
+        };
+      });
+    });
+  }, [currentUserId, setNodes, nodes.length]);
+
+  // автосохранение позиций и соединений в Supabase при изменении nodes/edges
+  useEffect(() => {
+    if (!isInitialized) return;
+
+    if (saveTimeoutRef.current) {
+      clearTimeout(saveTimeoutRef.current);
+    }
+
+    saveTimeoutRef.current = setTimeout(() => {
+      (async () => {
+        try {
+          const api = await import('../lib/apiClient');
+          const nodesForSave = nodes.map((n) => {
+            const d: any = n.data ?? {};
+            return {
+              id: n.id,
+              name: d.name ?? null,
+              title: d.originalTitle ?? d.title ?? null,
+              birth: d.birth ?? null,
+              death: d.death ?? null,
+              photoUrl: d.photoUrl ?? null,
+              position: n.position,
+              information: d.information ?? null,
+              kinships: d.kinships ?? null,
+              data: d,
+            };
+          });
+          const edgesForSave = edges.map((e) => ({
+            id: e.id,
+            source: e.source,
+            target: e.target,
+            label: e.label ?? null,
+            data: {
+              ...(e.data ?? {}),
+              sourceHandle: e.sourceHandle ?? null,
+              targetHandle: e.targetHandle ?? null,
+            },
+          }));
+          await api.saveFlowToServer(nodesForSave, edgesForSave);
+        } catch {
+          // тихо игнорируем ошибки автосохранения
+        }
+      })();
+    }, 500);
+
+    return () => {
+      if (saveTimeoutRef.current) {
+        clearTimeout(saveTimeoutRef.current);
+      }
+    };
+  }, [nodes, edges, isInitialized]);
+
+  const onConnect = useCallback(
+    (connection: Connection) => {
+      const id = `e${connection.source}-${connection.target}-${Date.now()}`;
+      const newEdge: Edge = {
+        id,
+        source: connection.source!,
+        target: connection.target!,
+        sourceHandle: connection.sourceHandle ?? undefined,
+        targetHandle: connection.targetHandle ?? undefined,
+        animated: false,
+        label: '',
+      };
+      setEdges((eds) => eds.concat(newEdge));
+    },
+    [setEdges],
+  );
 
   const onEdgeClick = useCallback((_: any, edge: Edge) => {
     setSelectedEdge(edge);
@@ -139,13 +245,15 @@ export default function FlowCanvas() {
         id: person.id,
         type: 'person',
         position: person.position ? JSON.parse(person.position) : { x: 200 + Math.random() * 200, y: 100 + Math.random() * 200 },
-          data: {
-            name: person.name ?? 'Новый человек',
-            birth: person.birth ?? '—',
-            title: person.title,
-            photoUrl: person.photo_url ?? null,
-            information: person.data?.information ?? null,
-          },
+        data: {
+          name: person.name ?? 'Новый человек',
+          birth: person.birth ?? '—',
+          originalTitle: person.title ?? '',
+          title: person.title ?? '',
+          photoUrl: person.photo_url ?? null,
+          information: person.data?.information ?? null,
+          kinships: person.kinships ?? null,
+        },
       };
       setNodes((nds) => nds.concat(node));
     }
@@ -204,6 +312,11 @@ export default function FlowCanvas() {
             onNodeClick={onNodeClick}
             nodeTypes={nodeTypes}
             className="bg-[length:30px_30px]"
+            // мобильные жесты: перетаскивание полотна и масштабирование щипком
+            panOnDrag
+            panOnScroll
+            zoomOnPinch
+            zoomOnScroll={false}
             style={{ touchAction: 'none' }}
           >
             <Background gap={16} size={1} />
@@ -231,7 +344,48 @@ export default function FlowCanvas() {
             onSave={async (id: string, data: any) => {
               const res = await (await import('../lib/apiClient')).updatePersonOnServer(id, data);
               if (res?.person) {
-                setNodes((nds) => nds.map((n) => (n.id === id ? { ...n, data: { ...n.data, ...data } } : n)));
+                setNodes((nds) => {
+                  const updated = nds.map((n) =>
+                    n.id === id
+                      ? {
+                          ...n,
+                          data: {
+                            ...n.data,
+                            ...data,
+                          },
+                        }
+                      : n,
+                  );
+
+                  // если мы редактировали выбранного пользователя, пересчитываем титулы сразу
+                  const current = currentUserId ? updated.find((n) => n.id === currentUserId) : null;
+                  const kinships = (current?.data as any)?.kinships ?? [];
+
+                  if (!current || !Array.isArray(kinships)) return updated;
+
+                  return updated.map((n) => {
+                    const d: any = n.data ?? {};
+                    const originalTitle = d.originalTitle ?? d.title ?? '';
+
+                    let titleForDisplay = originalTitle;
+                    if (n.id !== currentUserId) {
+                      const rel = kinships.find((k: any) => String(k.id) === String(n.id));
+                      if (rel?.title || rel?.titul) {
+                        titleForDisplay = rel.title ?? rel.titul;
+                      }
+                    }
+
+                    return {
+                      ...n,
+                      data: {
+                        ...d,
+                        originalTitle,
+                        title: titleForDisplay,
+                        isCurrentUser: n.id === currentUserId,
+                      },
+                    };
+                  });
+                });
               }
               setEditNode(null);
             }}
@@ -247,6 +401,16 @@ export default function FlowCanvas() {
           onClose={() => setSelectedEdge(null)}
           onSave={(id, label) => {
             setEdges((eds) => eds.map((e) => (e.id === id ? { ...e, label } : e)));
+          }}
+          onDelete={async (id) => {
+            try {
+              const api = await import('../lib/apiClient');
+              await api.deleteRelationOnServer(id);
+            } catch {
+              // ignore error, локальное удаление всё равно произойдёт
+            }
+            setEdges((eds) => eds.filter((e) => e.id !== id));
+            setSelectedEdge(null);
           }}
         />
       </div>

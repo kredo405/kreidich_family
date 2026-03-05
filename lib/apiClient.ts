@@ -39,6 +39,13 @@ export async function deletePersonOnServer(id: string) {
   return res.json();
 }
 
+export async function deleteRelationOnServer(id: string) {
+  const res = await fetch(`/api/relations/${id}`, {
+    method: 'DELETE',
+  });
+  return res.json();
+}
+
 export async function getPeopleFromServer() {
   const res = await fetch('/api/people');
   return res.json();
