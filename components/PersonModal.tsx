@@ -29,7 +29,6 @@ export default function PersonModal({ node, onClose, onSave, onDelete }: Props) 
 
   useEffect(() => {
     if (!node) return;
-    // first populate from local node data so modal appears fast
     const d: any = node.data ?? {};
     const normalizeForInput = (val: any) => {
       if (!val) return '';
@@ -43,6 +42,7 @@ export default function PersonModal({ node, onClose, onSave, onDelete }: Props) 
     setDeath(normalizeForInput(d.death ?? ''));
     setPhotoUrl(d.photoUrl ?? '');
     setInformation(d.information ?? '');
+    
     const localKinships: any[] = d.kinships ?? [];
     setKinships(
       Array.isArray(localKinships)
@@ -54,7 +54,6 @@ export default function PersonModal({ node, onClose, onSave, onDelete }: Props) 
     );
     setPreviewError(false);
 
-    // then try to fetch freshest data from server and overwrite fields
     (async () => {
       try {
         const res = await fetch(`/api/people/${node.id}`);
@@ -77,12 +76,9 @@ export default function PersonModal({ node, onClose, onSave, onDelete }: Props) 
               : [],
           );
         }
-      } catch (err) {
-        // ignore - keep local node data
-      }
+      } catch (err) { /* ignore */ }
     })();
 
-    // загрузим всех людей для подсказок по имени
     (async () => {
       try {
         const res = await fetch('/api/people');
@@ -96,17 +92,13 @@ export default function PersonModal({ node, onClose, onSave, onDelete }: Props) 
             }),
           );
         }
-      } catch {
-        // ignore
-      }
+      } catch { /* ignore */ }
     })();
   }, [node]);
 
   if (!node) return null;
 
   const handleSave = () => {
-    // Normalize photo path: if user provided a filename (no leading / or http),
-    // store it as a path under `/` so it maps to the Next.js `public` folder.
     let savedPhoto = (photoUrl || '').trim();
     if (savedPhoto && !/^https?:\/\//i.test(savedPhoto) && !savedPhoto.startsWith('/')) {
       savedPhoto = `/${savedPhoto}`;
@@ -128,12 +120,16 @@ export default function PersonModal({ node, onClose, onSave, onDelete }: Props) 
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center">
-      <div className="absolute inset-0 bg-black/60" onClick={onClose} />
-      <div className="relative z-50 w-11/12 max-w-2xl rounded-xl border border-zinc-800 bg-[#050505] p-6 shadow-2xl">
-        <div className="mb-4 flex items-start justify-between gap-4">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6">
+      <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={onClose} />
+      
+      {/* Контейнер модального окна */}
+      <div className="relative z-50 flex flex-col w-full max-w-2xl max-h-[90vh] rounded-xl border border-zinc-800 bg-[#050505] shadow-2xl overflow-hidden">
+        
+        {/* Шапка (Фиксированная) */}
+        <div className="flex items-start justify-between border-b border-zinc-800 p-5">
           <div className="flex items-center gap-4">
-            <div className="h-20 w-20 overflow-hidden rounded-md bg-zinc-100 dark:bg-zinc-800">
+            <div className="h-16 w-16 flex-shrink-0 overflow-hidden rounded-md bg-zinc-800">
               {photoUrl && !previewError ? (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img
@@ -143,194 +139,220 @@ export default function PersonModal({ node, onClose, onSave, onDelete }: Props) 
                   onError={() => setPreviewError(true)}
                 />
               ) : (
-                <div className="flex h-full w-full items-center justify-center text-sm text-zinc-500">Фото</div>
+                <div className="flex h-full w-full items-center justify-center text-[10px] uppercase tracking-wider text-zinc-500">Фото</div>
               )}
             </div>
             <div>
-              <div className="text-lg font-semibold text-zinc-50">{name || 'Новый человек'}</div>
-              <div className="text-sm text-zinc-500">ID: {node.id}</div>
-            </div>
-          </div>
-          <button onClick={onClose} className="text-zinc-400 hover:text-zinc-200">✕</button>
-        </div>
-
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-          <label className="flex flex-col">
-            <span className="mb-1 text-xs text-zinc-300">Имя</span>
-            <input
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              className="rounded border border-zinc-700 bg-[#111] px-3 py-2 text-sm text-zinc-50"
-            />
-          </label>
-
-          <label className="flex flex-col">
-            <span className="mb-1 text-xs text-zinc-300">Титул</span>
-            <input
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              className="rounded border border-zinc-700 bg-[#111] px-3 py-2 text-sm text-zinc-50"
-            />
-          </label>
-
-          <label className="flex flex-col">
-            <span className="mb-1 text-xs text-zinc-300">Дата рождения</span>
-            <input
-              type="date"
-              value={birth}
-              onChange={(e) => setBirth(e.target.value)}
-              className="rounded border border-zinc-700 bg-[#111] px-3 py-2 text-sm text-zinc-50"
-            />
-          </label>
-
-          <label className="flex flex-col">
-            <span className="mb-1 text-xs text-zinc-300">Дата смерти</span>
-            <input
-              type="date"
-              value={death}
-              onChange={(e) => setDeath(e.target.value)}
-              className="rounded border border-zinc-700 bg-[#111] px-3 py-2 text-sm text-zinc-50"
-            />
-          </label>
-
-          <label className="col-span-1 flex w-full flex-col sm:col-span-2">
-            <span className="mb-1 text-xs text-zinc-300">Фото (URL)</span>
-            <input
-              value={photoUrl}
-              onChange={(e) => {
-                setPhotoUrl(e.target.value);
-                setPreviewError(false);
-              }}
-              className="rounded border border-zinc-700 bg-[#111] px-3 py-2 text-sm text-zinc-50"
-            />
-          </label>
-
-          <label className="col-span-1 flex w-full flex-col sm:col-span-2">
-            <span className="mb-1 text-xs text-zinc-300">Информация</span>
-            <textarea
-              value={information}
-              onChange={(e) => setInformation(e.target.value)}
-              rows={4}
-              className="rounded border border-zinc-700 bg-[#111] px-3 py-2 text-sm text-zinc-50"
-            />
-          </label>
-
-          <div className="col-span-1 flex w-full flex-col gap-2 sm:col-span-2">
-            <div className="flex items-center justify-between">
-              <span className="text-xs text-zinc-300">Родство (для этого человека)</span>
-              <button
-                type="button"
-                className="text-xs text-blue-400 hover:underline"
-                onClick={() =>
-                  setKinships((rows) => rows.concat({ id: '', title: '', name: '' }))
-                }
-              >
-                Добавить родство
-              </button>
-            </div>
-            {kinships.length === 0 && (
-              <p className="text-xs text-zinc-400">
-                Здесь можно задать, кем являются другие люди для этого человека. Пример: отец, мать, бабушка.
-              </p>
-            )}
-            {kinships.map((row, idx) => (
-              <div key={idx} className="grid grid-cols-1 gap-2 sm:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)_auto] items-end">
-                <label className="flex flex-col">
-                  <span className="mb-1 text-[11px] text-zinc-300">Имя родственника</span>
-                  <input
-                    list="people-names"
-                    value={row.name ?? ''}
-                    onChange={(e) => {
-                      const value = e.target.value;
-                      setKinships((rows) =>
-                        rows.map((r, i) => {
-                          if (i !== idx) return r;
-                          const match = allPeople.find(
-                            (p: any) => (p.name ?? '').toLowerCase() === value.toLowerCase(),
-                          );
-                          return {
-                            ...r,
-                            name: value,
-                            id: match ? String(match.id) : r.id,
-                          };
-                        }),
-                      );
-                    }}
-                    className="rounded border border-zinc-700 bg-[#111] px-2 py-1 text-xs text-zinc-50"
-                  />
-                </label>
-                <label className="flex flex-col">
-                  <span className="mb-1 text-[11px] text-zinc-300">ID родственника</span>
-                  <input
-                    value={row.id}
-                    onChange={(e) => {
-                      const value = e.target.value;
-                      setKinships((rows) =>
-                        rows.map((r, i) => {
-                          if (i !== idx) return r;
-                          const match = allPeople.find(
-                            (p: any) => String(p.id) === value,
-                          );
-                          return {
-                            ...r,
-                            id: value,
-                            name: match?.name ?? r.name,
-                          };
-                        }),
-                      );
-                    }}
-                    className="rounded border border-zinc-700 bg-[#111] px-2 py-1 text-xs text-zinc-50"
-                  />
-                </label>
-                <label className="flex flex-col">
-                  <span className="mb-1 text-[11px] text-zinc-300">Титул относительно этого человека</span>
-                  <div className="flex gap-2">
-                    <input
-                      value={row.title}
-                      onChange={(e) => {
-                        const value = e.target.value;
-                        setKinships((rows) =>
-                          rows.map((r, i) => (i === idx ? { ...r, title: value } : r)),
-                        );
-                      }}
-                      className="flex-1 rounded border border-zinc-700 bg-[#111] px-2 py-1 text-xs text-zinc-50"
-                    />
-                    <button
-                      type="button"
-                      className="rounded border border-zinc-700 px-2 py-1 text-xs text-zinc-400 hover:bg-zinc-800"
-                      onClick={() =>
-                        setKinships((rows) => rows.filter((_, i) => i !== idx))
-                      }
-                    >
-                      ✕
-                    </button>
-                  </div>
-                </label>
+              <div className="text-lg font-semibold text-zinc-50 truncate max-w-[200px] sm:max-w-md">
+                {name || 'Новый человек'}
               </div>
-            ))}
-            <datalist id="people-names">
-              {allPeople.map((p: any) => (
-                <option key={p.id} value={p.name ?? ''}>
-                  {p.id}
-                </option>
-              ))}
-            </datalist>
+              <div className="text-xs text-zinc-500">ID: {node.id}</div>
+            </div>
+          </div>
+          <button onClick={onClose} className="p-1 text-zinc-400 hover:text-zinc-200 transition-colors">
+            <span className="text-2xl">✕</span>
+          </button>
+        </div>
+
+        {/* Тело формы (Прокручиваемое) */}
+        <div className="flex-1 overflow-y-auto p-5 custom-scrollbar">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <label className="flex flex-col">
+              <span className="mb-1 text-xs font-medium text-zinc-400">Имя</span>
+              <input
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                className="rounded border border-zinc-700 bg-[#111] px-3 py-2 text-sm text-zinc-50 focus:border-blue-500 focus:outline-none"
+              />
+            </label>
+
+            <label className="flex flex-col">
+              <span className="mb-1 text-xs font-medium text-zinc-400">Титул</span>
+              <input
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+                className="rounded border border-zinc-700 bg-[#111] px-3 py-2 text-sm text-zinc-50 focus:border-blue-500 focus:outline-none"
+              />
+            </label>
+
+            <label className="flex flex-col">
+              <span className="mb-1 text-xs font-medium text-zinc-400">Дата рождения</span>
+              <input
+                type="date"
+                value={birth}
+                onChange={(e) => setBirth(e.target.value)}
+                className="rounded border border-zinc-700 bg-[#111] px-3 py-2 text-sm text-zinc-50 focus:border-blue-500 focus:outline-none [color-scheme:dark]"
+              />
+            </label>
+
+            <label className="flex flex-col">
+              <span className="mb-1 text-xs font-medium text-zinc-400">Дата смерти</span>
+              <input
+                type="date"
+                value={death}
+                onChange={(e) => setDeath(e.target.value)}
+                className="rounded border border-zinc-700 bg-[#111] px-3 py-2 text-sm text-zinc-50 focus:border-blue-500 focus:outline-none [color-scheme:dark]"
+              />
+            </label>
+
+            <label className="col-span-1 flex w-full flex-col sm:col-span-2">
+              <span className="mb-1 text-xs font-medium text-zinc-400">Фото (URL)</span>
+              <input
+                value={photoUrl}
+                onChange={(e) => {
+                  setPhotoUrl(e.target.value);
+                  setPreviewError(false);
+                }}
+                placeholder="https://..."
+                className="rounded border border-zinc-700 bg-[#111] px-3 py-2 text-sm text-zinc-50 focus:border-blue-500 focus:outline-none"
+              />
+            </label>
+
+            <label className="col-span-1 flex w-full flex-col sm:col-span-2">
+              <span className="mb-1 text-xs font-medium text-zinc-400">Информация</span>
+              <textarea
+                value={information}
+                onChange={(e) => setInformation(e.target.value)}
+                rows={3}
+                className="rounded border border-zinc-700 bg-[#111] px-3 py-2 text-sm text-zinc-50 focus:border-blue-500 focus:outline-none resize-none"
+              />
+            </label>
+
+            {/* Секция Родства с собственной прокруткой */}
+            <div className="col-span-1 flex w-full flex-col gap-3 sm:col-span-2 mt-2">
+              <div className="flex items-center justify-between border-b border-zinc-800 pb-2">
+                <span className="text-xs font-semibold uppercase tracking-wider text-zinc-400">Родство</span>
+                <button
+                  type="button"
+                  className="text-xs font-medium text-blue-400 hover:text-blue-300 transition-colors"
+                  onClick={() => setKinships((rows) => rows.concat({ id: '', title: '', name: '' }))}
+                >
+                  + Добавить
+                </button>
+              </div>
+
+              {kinships.length === 0 ? (
+                <p className="py-2 text-xs italic text-zinc-500">Связи не указаны.</p>
+              ) : (
+                <div className="max-h-48 overflow-y-auto pr-2 space-y-4 custom-scrollbar">
+                  {kinships.map((row, idx) => (
+                    <div key={idx} className="relative grid grid-cols-1 gap-2 rounded-lg border border-zinc-800/50 p-3 sm:grid-cols-[1fr_0.6fr_1fr] sm:items-end sm:p-0 sm:border-0">
+                      <label className="flex flex-col">
+                        <span className="mb-1 text-[10px] text-zinc-500 uppercase">Родственник</span>
+                        <input
+                          list="people-names"
+                          placeholder="Имя..."
+                          value={row.name ?? ''}
+                          onChange={(e) => {
+                            const value = e.target.value;
+                            setKinships((rows) =>
+                              rows.map((r, i) => {
+                                if (i !== idx) return r;
+                                const match = allPeople.find(
+                                  (p: any) => (p.name ?? '').toLowerCase() === value.toLowerCase(),
+                                );
+                                return { ...r, name: value, id: match ? String(match.id) : r.id };
+                              }),
+                            );
+                          }}
+                          className="rounded border border-zinc-700 bg-[#111] px-2 py-1.5 text-xs text-zinc-50"
+                        />
+                      </label>
+                      <label className="flex flex-col">
+                        <span className="mb-1 text-[10px] text-zinc-500 uppercase">ID</span>
+                        <input
+                          value={row.id}
+                          onChange={(e) => {
+                            const value = e.target.value;
+                            setKinships((rows) =>
+                              rows.map((r, i) => {
+                                if (i !== idx) return r;
+                                const match = allPeople.find((p: any) => String(p.id) === value);
+                                return { ...r, id: value, name: match?.name ?? r.name };
+                              }),
+                            );
+                          }}
+                          className="rounded border border-zinc-700 bg-[#111] px-2 py-1.5 text-xs text-zinc-50"
+                        />
+                      </label>
+                      <label className="flex flex-col relative">
+                        <span className="mb-1 text-[10px] text-zinc-500 uppercase">Кто он (титул)</span>
+                        <div className="flex gap-2">
+                          <input
+                            value={row.title}
+                            placeholder="напр. Отец"
+                            onChange={(e) => {
+                              const value = e.target.value;
+                              setKinships((rows) =>
+                                rows.map((r, i) => (i === idx ? { ...r, title: value } : r)),
+                              );
+                            }}
+                            className="flex-1 rounded border border-zinc-700 bg-[#111] px-2 py-1.5 text-xs text-zinc-50"
+                          />
+                          <button
+                            type="button"
+                            className="flex h-8 w-8 items-center justify-center rounded border border-zinc-700 text-zinc-400 hover:bg-red-950/30 hover:text-red-400 transition-colors"
+                            onClick={() => setKinships((rows) => rows.filter((_, i) => i !== idx))}
+                          >
+                            ✕
+                          </button>
+                        </div>
+                      </label>
+                    </div>
+                  ))}
+                </div>
+              )}
+              
+              <datalist id="people-names">
+                {allPeople.map((p: any) => (
+                  <option key={p.id} value={p.name ?? ''}>ID: {p.id}</option>
+                ))}
+              </datalist>
+            </div>
           </div>
         </div>
 
-        <div className="mt-4 flex items-center justify-between gap-3">
-          <button onClick={handleDelete} className="rounded-md border border-red-200 px-3 py-2 text-sm text-red-700 hover:bg-red-50 dark:border-red-800">Удалить</button>
-          <div className="flex items-center gap-3">
+        {/* Футер (Фиксированный) */}
+        <div className="flex flex-col-reverse sm:flex-row items-center justify-between gap-3 border-t border-zinc-800 p-5 bg-[#080808]">
+          <button 
+            onClick={handleDelete} 
+            className="w-full sm:w-auto rounded-md border border-red-900/50 px-4 py-2 text-sm text-red-500 hover:bg-red-950/20 transition-colors"
+          >
+            Удалить
+          </button>
+          <div className="flex w-full sm:w-auto items-center gap-3">
             <button
               onClick={onClose}
-              className="rounded-md border border-zinc-700 px-3 py-2 text-sm text-zinc-200 hover:bg-zinc-800"
+              className="flex-1 sm:flex-none rounded-md border border-zinc-700 px-4 py-2 text-sm text-zinc-300 hover:bg-zinc-800 transition-colors"
             >
               Отмена
             </button>
-            <button onClick={handleSave} className="rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700">Сохранить</button>
+            <button 
+              onClick={handleSave} 
+              className="flex-1 sm:flex-none rounded-md bg-blue-600 px-6 py-2 text-sm font-medium text-white hover:bg-blue-500 shadow-lg shadow-blue-900/20 transition-all active:scale-95"
+            >
+              Сохранить
+            </button>
           </div>
         </div>
       </div>
+
+      {/* Инлайн стили для красивого скроллбара (опционально) */}
+      <style jsx global>{`
+        .custom-scrollbar::-webkit-scrollbar {
+          width: 5px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-track {
+          background: transparent;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+          background: #27272a;
+          border-radius: 10px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+          background: #3f3f46;
+        }
+      `}</style>
     </div>
   );
 }
