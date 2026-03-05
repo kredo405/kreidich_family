@@ -297,7 +297,7 @@ export default function FlowCanvas() {
             aria-label="Toggle sidebar"
             className="rounded-md bg-white/90 p-2 shadow-md dark:bg-[#0b0b0b]/90"
           >
-            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-zinc-900 dark:text-zinc-50"><path d="M3 12h18M3 6h18M3 18h18"/></svg>
+            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-zinc-900 dark:text-zinc-50"><path d="M3 12h18M3 6h18M3 18h18" /></svg>
           </button>
         </div>
 
@@ -306,13 +306,12 @@ export default function FlowCanvas() {
             nodes={nodes}
             edges={edges}
             onNodesChange={onNodeChange}
-            onEdgesChange={onEdgeChange}
+            onEdgesChange={onEdgesChange}
             onConnect={onConnect}
             onEdgeClick={onEdgeClick}
             onNodeClick={onNodeClick}
             nodeTypes={nodeTypes}
             className="bg-[length:30px_30px]"
-            // мобильные жесты: перетаскивание полотна и масштабирование щипком
             panOnDrag
             panOnScroll
             zoomOnPinch
@@ -320,7 +319,10 @@ export default function FlowCanvas() {
             style={{ touchAction: 'none' }}
           >
             <Background gap={16} size={1} />
-            <MiniMap />
+
+            {/* ИЗМЕНЕНИЕ ЗДЕСЬ: добавляем класс скрытия для мобильных */}
+            <MiniMap className="!hidden sm:!block" />
+
             <Controls />
           </ReactFlow>
         </ReactFlowProvider>
@@ -348,12 +350,12 @@ export default function FlowCanvas() {
                   const updated = nds.map((n) =>
                     n.id === id
                       ? {
-                          ...n,
-                          data: {
-                            ...n.data,
-                            ...data,
-                          },
-                        }
+                        ...n,
+                        data: {
+                          ...n.data,
+                          ...data,
+                        },
+                      }
                       : n,
                   );
 
