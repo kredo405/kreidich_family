@@ -311,6 +311,14 @@ export default function FlowCanvas() {
             onEdgeClick={onEdgeClick}
             onNodeClick={onNodeClick}
             nodeTypes={nodeTypes}
+
+            // --- НОВЫЕ ПАРАМЕТРЫ ТУТ ---
+            fitView                 // Автоматически впишет все узлы в экран при загрузке
+            minZoom={0.1}           // Позволит очень сильно отдалять (полезно для больших деревьев)
+            maxZoom={4}             // Позволит очень сильно приближать (по умолчанию 2)
+            fitViewOptions={{ padding: 0.2 }} // Добавит отступы при автоматическом масштабировании
+            // ---------------------------
+
             className="bg-[length:30px_30px]"
             panOnDrag
             panOnScroll
